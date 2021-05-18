@@ -244,9 +244,13 @@ test "mem copy slice" {
 }
 
 pub fn main() !void {
-    const POP_SIZE = 10;
-    const IND_SIZE = 64;
+    const POP_SIZE = 100;
+    const IND_SIZE = 128;
     const GENS = 1000000;
+
+    const PM: f32 = 0.005;
+    const PC: f32 = 0.7;
+    const PT: f32 = 0.9;
 
     const allocator = std.heap.page_allocator;
 
@@ -277,28 +281,42 @@ pub fn main() !void {
     while (gens < GENS) : (gens += 1) {
         ones_evaluation(pop_src, fitnesses);
 
-        var fitest: f32 = 0.0;
-        var fit_index: usize = 0;
-        while (fit_index < POP_SIZE) : (fit_index += 1) {
-            fitest = std.math.max(fitest, fitnesses[fit_index]);
-        }
-        try stdout.writer().print("{:4}\n", .{@floatToInt(u32, fitest)});
+        if (gens % 10000 == 0) {
+            var fittest: f32 = 0.0;
+            var fit_index: usize = 0;
+            while (fit_index < POP_SIZE) : (fit_index += 1) {
+                fittest = std.math.max(fittest, fitnesses[fit_index]);
+            }
+            try stdout.writer().print("{:4}\n", .{@floatToInt(u32, fittest)});
 
-        two_tournament_selection(pop_src, pop_dest, fitnesses, 0.8, rand);
+            if (fittest == IND_SIZE) {
+                try stdout.writer().print("Maximum fittness on generation {}\n", .{gens});
+                break;
+            }
+        }
+
+        two_tournament_selection(pop_src, pop_dest, fitnesses, PC, rand);
 
         std.mem.swap(*Pop, &pop_src, &pop_dest);
 
-        point_mutation(pop_src, rand, 0.01);
+        point_mutation(pop_src, rand, PM);
 
-        one_point_crossover(pop_src, rand, 0.6);
+        one_point_crossover(pop_src, rand, PT);
     }
 
     ones_evaluation(pop_src, fitnesses);
 
-    try pop_src.print();
+    //try pop_src.print();
     var fit_index: usize = 0;
     while (fit_index < POP_SIZE) : (fit_index += 1) {
         try stdout.writer().print("{d} ", .{fitnesses[fit_index]});
     }
     try stdout.writer().print("\n", .{});
+
+    var fittest: f32 = 0.0;
+    fit_index = 0;
+    while (fit_index < POP_SIZE) : (fit_index += 1) {
+        fittest = std.math.max(fittest, fitnesses[fit_index]);
+    }
+    try stdout.writer().print("{:4}\n", .{@floatToInt(u32, fittest)});
 }
