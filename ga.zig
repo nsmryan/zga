@@ -205,14 +205,21 @@ pub fn two_tournament_selection(src: *Pop, dest: *Pop, fitnesses: []f32, ps: f32
             std.mem.swap(usize, &first_index, &second_index);
         }
 
-        var selected: usize = 0;
-        if (random.float(f32) < ps) {
-            selected = first_index;
-        } else {
-            selected = second_index;
-        }
+        var selected: usize = hold_tournament(first_index, second_index, ps, random);
         std.mem.copy(u8, dest.inds[ind_index].locs, src.inds[selected].locs);
     }
+}
+
+/// Hold a two individual tournament. The first individual is assumed to have an equal or greater
+/// fitness compared to the second.
+pub fn hold_tournament(first_index: usize, second_index: usize, ps: f32, random: *std.rand.Random) usize {
+    var selected: usize = 0;
+    if (random.float(f32) < ps) {
+        selected = first_index;
+    } else {
+        selected = second_index;
+    }
+    return selected;
 }
 
 test "mem copy slice" {
