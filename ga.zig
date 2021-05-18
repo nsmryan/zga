@@ -95,13 +95,20 @@ pub fn point_mutation(pop: *Pop, rand: *std.rand.Random, pm: f32) void {
 pub fn point_mutation_ind(ind: *Ind, rand: *std.rand.Random, pm: f32) void {
     var loc_index: usize = 0;
     while (loc_index < ind.locs.len) : (loc_index += 1) {
-        var bit_index: u8 = 0;
-        while (bit_index < @bitSizeOf(u8)) : (bit_index += 1) {
-            if (rand.float(f32) < pm) {
-                ind.locs[loc_index] = flip_bit(ind.locs[loc_index], bit_index);
-            }
+        ind.locs[loc_index] = point_mutation_byte(ind.locs[loc_index], rand, pm);
+    }
+}
+
+pub fn point_mutation_byte(in_byte: u8, rand: *std.rand.Random, pm: f32) u8 {
+    var byte = in_byte;
+    var bit_index: u8 = 0;
+    while (bit_index < @bitSizeOf(u8)) : (bit_index += 1) {
+        if (rand.float(f32) < pm) {
+            byte = flip_bit(byte, bit_index);
         }
     }
+
+    return byte;
 }
 
 pub fn flip_bit(byte: u8, bit_index: u8) u8 {
