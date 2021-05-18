@@ -88,18 +88,32 @@ const Pop = struct {
 pub fn point_mutation(pop: *Pop, rand: *std.rand.Random, pm: f32) void {
     var ind_index: usize = 0;
     while (ind_index < pop.inds.len) : (ind_index += 1) {
-        var loc_index: usize = 0;
-        var ind = pop.inds[ind_index];
-        while (loc_index < ind.locs.len) : (loc_index += 1) {
-            var bit_index: u8 = 0;
-            while (bit_index < @bitSizeOf(u8)) : (bit_index += 1) {
-                if (rand.float(f32) < pm) {
-                    const shift: u3 = @intCast(u3, bit_index);
-                    ind.locs[loc_index] ^= @shlExact(@as(u8, 1), shift);
-                }
+        point_mutation_ind(&pop.inds[ind_index], rand, pm);
+    }
+}
+
+pub fn point_mutation_ind(ind: *Ind, rand: *std.rand.Random, pm: f32) void {
+    var loc_index: usize = 0;
+    while (loc_index < ind.locs.len) : (loc_index += 1) {
+        var bit_index: u8 = 0;
+        while (bit_index < @bitSizeOf(u8)) : (bit_index += 1) {
+            if (rand.float(f32) < pm) {
+                ind.locs[loc_index] = flip_bit(ind.locs[loc_index], bit_index);
             }
         }
     }
+}
+
+pub fn flip_bit(byte: u8, bit_index: u8) u8 {
+    assert(bit_index < 8);
+    const shift: u3 = @intCast(u3, bit_index);
+    return byte ^ @shlExact(@as(u8, 1), shift);
+}
+
+test "bit flips" {
+    expect(1 == flip_bit(0, 0));
+    expect(0x80 == flip_bit(0, 7));
+    expect(0 == flip_bit(1, 0));
 }
 
 pub fn one_point_crossover(pop: *Pop, rand: *std.rand.Random, pc: f32) void {
