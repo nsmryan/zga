@@ -9,15 +9,36 @@ const Ind = struct {
     pub fn init(locs: []u8) Ind {
         return Ind{ .locs = locs };
     }
+
+    pub fn print(ind: *Ind) !void {
+        const stdout = std.io.getStdOut();
+
+        var loc_index: usize = 0;
+        while (loc_index < ind.locs.len) : (loc_index += 1) {
+            var bit_index: u8 = 0;
+            while (bit_index < @bitSizeOf(u8)) : (bit_index += 1) {
+                const shift: u3 = @intCast(u3, bit_index);
+                const byte = ind.locs[loc_index];
+                const bool_bit = byte & (@shlExact(@as(u8, 1), shift)) != 0;
+                if (bool_bit) {
+                    try stdout.writer().print("1", .{});
+                } else {
+                    try stdout.writer().print("0", .{});
+                }
+            }
+        }
+    }
 };
 
 const Pop = struct {
     inds: []Ind,
 
+    /// Initialize Pop using a re-allocated slice of individuals
     pub fn init(inds: []Ind) Pop {
         return Pop{ .inds = inds };
     }
 
+    /// Create a new population with all 0s for all individuals
     pub fn new(pop_size: usize, ind_size: usize, allocator: *std.mem.Allocator) !Pop {
         const byte_count = pop_size * ind_size / @bitSizeOf(u8);
         var bytes = try allocator.alloc(u8, byte_count);
@@ -38,6 +59,7 @@ const Pop = struct {
         return pop;
     }
 
+    /// Randomize a populations individuals
     pub fn randomize(pop: *Pop, random: *std.rand.Random) void {
         var ind_index: usize = 0;
         while (ind_index < pop.inds.len) : (ind_index += 1) {
@@ -48,24 +70,14 @@ const Pop = struct {
         }
     }
 
+    /// Print out a population's individuals, one per line
     pub fn print(pop: *Pop) !void {
         const stdout = std.io.getStdOut();
 
         var ind_index: usize = 0;
         while (ind_index < pop.inds.len) : (ind_index += 1) {
-            var loc_index: usize = 0;
             var ind = pop.inds[ind_index];
-            while (loc_index < ind.locs.len) : (loc_index += 1) {
-                var bit_index: u8 = 0;
-                while (bit_index < @bitSizeOf(u8)) : (bit_index += 1) {
-                    const shift: u3 = @intCast(u3, bit_index);
-                    if (pop.inds[ind_index].locs[loc_index] & (@shlExact(@as(u8, 1), shift)) != 0) {
-                        try stdout.writer().print("1", .{});
-                    } else {
-                        try stdout.writer().print("0", .{});
-                    }
-                }
-            }
+            try ind.print();
             try stdout.writer().print("\n", .{});
         }
 
