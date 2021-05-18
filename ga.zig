@@ -83,6 +83,10 @@ const Pop = struct {
 
         try stdout.writer().print("\n", .{});
     }
+
+    pub fn free(pop: *Pop, allocator: *std.mem.Allocator) void {
+        allocator.free(pop.inds);
+    }
 };
 
 pub fn point_mutation(pop: *Pop, rand: *std.rand.Random, pm: f32) void {
@@ -242,7 +246,7 @@ test "mem copy slice" {
 pub fn main() !void {
     const POP_SIZE = 10;
     const IND_SIZE = 64;
-    const GENS = 10;
+    const GENS = 1000000;
 
     const allocator = std.heap.page_allocator;
 
@@ -254,20 +258,23 @@ pub fn main() !void {
     const rand = &rng.random;
 
     var pop = try Pop.new(POP_SIZE, IND_SIZE, allocator);
+    defer pop.free(allocator);
 
     pop.randomize(rand);
 
     var pop_other = try Pop.new(POP_SIZE, IND_SIZE, allocator);
+    defer pop_other.free(allocator);
 
     var pop_src = &pop;
     var pop_dest = &pop_other;
 
     const stdout = std.io.getStdOut();
 
+    var fitnesses: []f32 = try allocator.alloc(f32, POP_SIZE);
+    defer allocator.free(fitnesses);
+
     var gens: usize = 0;
     while (gens < GENS) : (gens += 1) {
-        //try stdout.writer().print("-----------------------\n", .{});
-        var fitnesses: []f32 = try allocator.alloc(f32, POP_SIZE);
         ones_evaluation(pop_src, fitnesses);
 
         var fitest: f32 = 0.0;
@@ -275,23 +282,17 @@ pub fn main() !void {
         while (fit_index < POP_SIZE) : (fit_index += 1) {
             fitest = std.math.max(fitest, fitnesses[fit_index]);
         }
-        try stdout.writer().print("{:4.2}\n", .{fitest});
+        try stdout.writer().print("{:4}\n", .{@floatToInt(u32, fitest)});
 
-        two_tournament_selection(pop_src, pop_dest, fitnesses, 0.7, rand);
+        two_tournament_selection(pop_src, pop_dest, fitnesses, 0.8, rand);
 
         std.mem.swap(*Pop, &pop_src, &pop_dest);
 
-        //[try pop_src.print();
-        point_mutation(pop_src, rand, 0.05);
+        point_mutation(pop_src, rand, 0.01);
 
-        //[try pop_src.print();
         one_point_crossover(pop_src, rand, 0.6);
-        //[try pop_src.print();
-
-        //try pop_src.print();
     }
 
-    var fitnesses: []f32 = try allocator.alloc(f32, POP_SIZE);
     ones_evaluation(pop_src, fitnesses);
 
     try pop_src.print();
