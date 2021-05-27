@@ -4,6 +4,30 @@ const ga = @import("ga.zig");
 const expect = std.testing.expect;
 const assert = std.debug.assert;
 
+pub fn Stack(comptime T: type) type {
+    return struct {
+        slots: []T,
+        sp: usize,
+
+        pub fn init(comptime T: type, slots: []T) Stack {
+            return Stack(T){ .slots = slots };
+        }
+
+        pub fn push(stack: *Stack(T), item: T) !void {
+            stack.slots[stack.sp] = item;
+            stack.sp += 1;
+        }
+    };
+}
+
+pub fn Symbol(comptime T: type) type {
+    return struct {
+        name: u8,
+        stack_effect: .{ usize, usize },
+        op: fn (Stack(T)) void,
+    };
+}
+
 pub fn rotation(pop_src: *Pop, pop_dst: *Pop, pr: f32, random: *Random) void {
     var ind_index: usize = 0;
 
