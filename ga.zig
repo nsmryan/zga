@@ -12,6 +12,20 @@ pub const Ind = struct {
         return Ind{ .locs = locs };
     }
 
+    pub fn new(ind_size: usize, allocator: *std.mem.Allocator) !Ind {
+        var byte_count = ind_size / @bitSizeOf(u8);
+        if (ind_size % @bitSizeOf(u8) != 0) {
+            byte_count += 1;
+        }
+
+        var bytes = try allocator.alloc(u8, byte_count);
+        return Ind{ .locs = bytes };
+    }
+
+    pub fn free(ind: *Ind, allocator: *std.mem.Allocator) void {
+        allocator.free(ind.locs);
+    }
+
     pub fn print(ind: *Ind) !void {
         const stdout = std.io.getStdOut();
 

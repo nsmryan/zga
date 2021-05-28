@@ -5,6 +5,7 @@ const rotation = @import("rotation.zig");
 const crossover = @import("crossover.zig");
 
 const expect = std.testing.expect;
+const expectEqual = std.testing.expectEqual;
 const assert = std.debug.assert;
 
 const StackError = error{
@@ -38,6 +39,10 @@ pub fn Stack(comptime T: type) type {
                 return StackError.Underflow;
             }
         }
+
+        pub fn clear(stack: *Stack(T)) void {
+            stack.sp = 0;
+        }
     };
 }
 
@@ -56,14 +61,14 @@ pub fn Symbol(comptime T: type) type {
     };
 }
 
-fn pusher(comptime T: type, item: T) Symbol(T) {
+fn pusher(comptime T: type, name: u8, item: T) Symbol(T) {
     const fun = struct {
         fn inner(stack: *Stack(f32)) StackError!void {
             try stack.push(item);
         }
     };
 
-    return Symbol(T).new('1', 0, 1, fun.inner);
+    return Symbol(T).new(name, 0, 1, fun.inner);
 }
 
 test "pusher" {
@@ -80,9 +85,9 @@ test "pusher" {
     expect(stack.slots[2] == 2);
 }
 
-const sym_push_zero: Symbol(f32) = pusher(f32, 0);
-const sym_push_one: Symbol(f32) = pusher(f32, 1);
-const sym_push_two: Symbol(f32) = pusher(f32, 2);
+const sym_push_zero: Symbol(f32) = pusher(f32, '0', 0);
+const sym_push_one: Symbol(f32) = pusher(f32, '1', 1);
+const sym_push_two: Symbol(f32) = pusher(f32, '2', 2);
 
 fn sym_f32(comptime name: u8, comptime op: fn (f32, f32) f32) Symbol(f32) {
     const fun = struct {
@@ -111,7 +116,7 @@ fn mul(first: f32, second: f32) f32 {
 const sym_mul: Symbol(f32) = sym_f32('*', mul);
 
 fn div(first: f32, second: f32) f32 {
-    if (second != 0.0) {
+    if (first != 0.0) {
         return second / first;
     } else {
         return 0.0;
@@ -152,20 +157,22 @@ test "stack f32 ops" {
 
 pub fn Decoder(comptime T: type) type {
     return struct {
-        terminals: []Symbol,
-        nonterminals: []Symbol,
+        const Self = @This();
 
-        pub fn create(terminals: []Symbol, nonterminals: []Symbol) Decoder {
-            return Decoder{ .terminals = terminals, .nonterminals = nonterminals };
+        terminals: []Symbol(T),
+        nonterminals: []Symbol(T),
+
+        pub fn create(terminals: []Symbol(T), nonterminals: []Symbol(T)) Self {
+            return Self{ .terminals = terminals, .nonterminals = nonterminals };
         }
 
-        pub fn decode(decoder: *Decoder, gene: u8) Symbol {
-            const is_terminal = @intToBool(gene & 1);
+        pub fn decode(decoder: *Self, gene: u8) Symbol(T) {
+            const is_terminal = gene & 1 == 0;
             const index = gene >> 1;
 
-            var symbols = undefined;
+            var symbols: []Symbol(T) = undefined;
             if (is_terminal) {
-                symbols = decoder.terminal;
+                symbols = decoder.terminals;
             } else {
                 symbols = decoder.nonterminals;
             }
@@ -175,17 +182,81 @@ pub fn Decoder(comptime T: type) type {
     };
 }
 
-pub fn max_f32_evaluation(pop: *ga.Pop, fitnesses: []f32) void {}
+pub fn express_f32(ind: []u8, decoder: *Decoder(f32), stack: *Stack(f32)) f32 {
+    stack.clear();
+
+    var loc_index: usize = 0;
+    while (loc_index < ind.len) : (loc_index += 1) {
+        const sym = decoder.decode(ind[loc_index]);
+        // run operation, ignoring errors
+        sym.op(stack) catch {};
+    }
+
+    return stack.pop() catch 0;
+}
+
+test "express f32" {
+    var terminals = [_]Symbol(f32){ sym_push_zero, sym_push_one, sym_push_two };
+    var non_terminals = [_]Symbol(f32){ sym_add, sym_sub, sym_div, sym_mul };
+    var decoder = Decoder(f32).create(terminals[0..], non_terminals[0..]);
+
+    const stdout = std.io.getStdOut();
+    try stdout.writer().print("\n", .{});
+    try stdout.writer().print("decode 0 {c}\n", .{decoder.decode(0x00).name});
+    try stdout.writer().print("decode 2 {c}\n", .{decoder.decode(0x02).name});
+    try stdout.writer().print("decode 1 {c}\n", .{decoder.decode(0x01).name});
+    try stdout.writer().print("decode 3 {c}\n", .{decoder.decode(0x03).name});
+
+    expectEqual(sym_push_zero.name, decoder.decode(0).name);
+    expectEqual(sym_add.name, decoder.decode(1).name);
+
+    var slots: [32]f32 = undefined;
+    std.mem.set(f32, slots[0..], 0.0);
+    var stack: Stack(f32) = Stack(f32).create(slots[0..]);
+
+    var ind = [_]u8{ 2, 2, 1 };
+
+    const result: f32 = express_f32(ind[0..], &decoder, &stack);
+    const expected: f32 = 2.0;
+    expectEqual(expected, result);
+}
+
+pub fn max_f32_evaluation(pop: *ga.Pop, decoder: *Decoder(f32), fitnesses: []f32) void {
+    var slots: [32]f32 = undefined;
+    std.mem.set(f32, slots[0..], 0.0);
+    var stack: Stack(f32) = Stack(f32).create(slots[0..]);
+
+    var ind_index: usize = 0;
+    while (ind_index < pop.inds.len) : (ind_index += 1) {
+        fitnesses[ind_index] = express_f32(pop.inds[ind_index].locs, decoder, &stack);
+    }
+}
+
+pub fn most_elite(pop: *ga.Pop, fitnesses: []f32, elite: *ga.Ind) void {
+    var fittest: usize = 0;
+    var fit_index: usize = 0;
+    while (fit_index < fitnesses.len) : (fit_index += 1) {
+        if (fitnesses[fit_index] > fitnesses[fittest]) {
+            fittest = fit_index;
+        }
+    }
+
+    std.mem.copy(u8, elite.locs, pop.inds[fittest].locs);
+}
+
+pub fn ensure_elite(pop: *ga.Pop, elite: *ga.Ind) void {
+    std.mem.copy(u8, pop.inds[0].locs, elite.locs);
+}
 
 pub fn main() !void {
-    const POP_SIZE = 100;
-    const IND_SIZE = 128;
-    const GENS = 1000;
+    const POP_SIZE = 30;
+    const IND_SIZE = 160;
+    const GENS = 10000;
 
-    const PM: f32 = 0.005;
-    const PR: f32 = 0.005;
-    const PC: f32 = 0.7;
-    const PC2: f32 = 0.7;
+    const PM: f32 = 0.001;
+    const PR: f32 = 0.001;
+    const PC: f32 = 0.6;
+    const PC2: f32 = 0.6;
     const PT: f32 = 0.9;
 
     const allocator = std.heap.page_allocator;
@@ -205,6 +276,9 @@ pub fn main() !void {
     var pop_other = try ga.Pop.new(POP_SIZE, IND_SIZE, allocator);
     defer pop_other.free(allocator);
 
+    var elite = try ga.Ind.new(IND_SIZE, allocator);
+    defer elite.free(allocator);
+
     var pop_src = &pop;
     var pop_dest = &pop_other;
 
@@ -213,25 +287,43 @@ pub fn main() !void {
     var fitnesses: []f32 = try allocator.alloc(f32, POP_SIZE);
     defer allocator.free(fitnesses);
 
+    var terminals = [_]Symbol(f32){ sym_push_zero, sym_push_one, sym_push_two };
+    var non_terminals = [_]Symbol(f32){ sym_add, sym_sub, sym_div, sym_mul };
+    var decoder = Decoder(f32).create(terminals[0..], non_terminals[0..]);
+
     var gens: usize = 0;
     while (gens < GENS) : (gens += 1) {
         try stdout.writer().print("gen {}\n", .{gens});
 
-        max_f32_evaluation(pop_src, fitnesses);
+        max_f32_evaluation(pop_src, &decoder, fitnesses);
 
-        tourn.two_tournament_selection(pop_src, pop_dest, fitnesses, PC, rand);
+        most_elite(pop_src, fitnesses, &elite);
 
+        tourn.two_tournament_selection(pop_src, pop_dest, fitnesses, PT, rand);
         std.mem.swap(*ga.Pop, &pop_src, &pop_dest);
 
         ga.point_mutation(pop_src, rand, PM);
 
-        rotation.rotation(pop_src, pop_dest, rand, PR);
-        std.mem.swap(*ga.Pop, &pop_src, &pop_dest);
+        rotation.rotation(pop_src, rand, PR);
 
         crossover.one_point_crossover(pop_src, rand, PC);
 
         crossover.two_point_crossover(pop_src, rand, PC2);
+
+        ensure_elite(pop_src, &elite);
     }
 
-    max_f32_evaluation(pop_src, fitnesses);
+    max_f32_evaluation(pop_src, &decoder, fitnesses);
+
+    var fit_index: usize = 0;
+    while (fit_index < fitnesses.len) : (fit_index += 1) {
+        try stdout.writer().print("fitness {}\n", .{@floatToInt(i32, fitnesses[fit_index])});
+
+        var loc_index: usize = 0;
+        while (loc_index < pop_src.inds[fit_index].locs.len) : (loc_index += 1) {
+            const sym = decoder.decode(pop_src.inds[fit_index].locs[loc_index]);
+            try stdout.writer().print("{c}", .{sym.name});
+        }
+        try stdout.writer().print("\n", .{});
+    }
 }

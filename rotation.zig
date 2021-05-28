@@ -5,26 +5,25 @@ const expect = std.testing.expect;
 const assert = std.debug.assert;
 const Random = std.rand.Random;
 
-pub fn rotation(pop_src: *ga.Pop, pop_dst: *ga.Pop, random: *Random, pr: f32) void {
+pub fn rotation(pop: *ga.Pop, random: *Random, pr: f32) void {
     var ind_index: usize = 0;
-
-    while (ind_index < pop_src.inds.len) : (ind_index += 1) {
+    while (ind_index < pop.inds.len) : (ind_index += 1) {
         if (random.float(f32) < pr) {
-            var rotation_point = random.intRangeAtMost(usize, 0, pop_src.inds.len - 1);
-            rotate(u8, pop_src.inds[ind_index].locs, pop_dst.inds[ind_index].locs, rotation_point);
+            const max_index = pop.inds[ind_index].locs.len;
+            var rotation_point = random.intRangeAtMost(usize, 0, max_index - 1);
+            rotate(u8, pop.inds[ind_index].locs, rotation_point);
         }
     }
 }
 
-pub fn rotate(comptime T: type, src: []const T, dst: []T, rotation_index: usize) void {
+pub fn rotate(comptime T: type, src: []T, rotation_index: usize) void {
     assert(rotation_index < src.len);
-    assert(dst.len == src.len);
 
     var loc_index: usize = 0;
     while (loc_index < src.len) : (loc_index += 1) {
         const index: usize = @mod(loc_index + rotation_index, src.len);
 
-        dst[loc_index] = src[index];
+        std.mem.swap(u8, &src[loc_index], &src[index]);
     }
 }
 
