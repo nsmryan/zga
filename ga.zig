@@ -1,9 +1,11 @@
 const std = @import("std");
+const crossover = @import("crossover.zig");
+const tourn = @import("tournament.zig");
 
 const expect = std.testing.expect;
 const assert = std.debug.assert;
 
-const Ind = struct {
+pub const Ind = struct {
     locs: []u8,
 
     pub fn init(locs: []u8) Ind {
@@ -30,7 +32,7 @@ const Ind = struct {
     }
 };
 
-const Pop = struct {
+pub const Pop = struct {
     inds: []Ind,
 
     /// Initialize Pop using a re-allocated slice of individuals
@@ -127,55 +129,6 @@ test "bit flips" {
     expect(0 == flip_bit(1, 0));
 }
 
-pub fn one_point_crossover(pop: *Pop, rand: *std.rand.Random, pc: f32) void {
-    const ind_len = pop.inds[0].locs.len;
-
-    var pair_index: usize = 0;
-    while (pair_index < (pop.inds.len / 2)) : (pair_index += 1) {
-        if (rand.float(f32) < pc) {
-            const first_index = pair_index * 2;
-            const second_index = pair_index * 2 + 1;
-
-            const cross_point = rand.intRangeAtMost(usize, 0, ind_len - 1);
-            cross(cross_point, pop.inds[first_index].locs, pop.inds[second_index].locs);
-        }
-    }
-}
-
-pub fn cross(cross_point: usize, first: []u8, second: []u8) void {
-    assert(first.len == second.len);
-    assert(cross_point < first.len);
-    assert(cross_point < second.len);
-
-    var loc_index: usize = 0;
-    while (loc_index < cross_point) : (loc_index += 1) {
-        std.mem.swap(u8, &first[loc_index], &second[loc_index]);
-    }
-}
-
-test "cross" {
-    const allocator = std.heap.page_allocator;
-
-    const byte_count = 10;
-    var bytes = try allocator.alloc(u8, byte_count);
-    std.mem.set(u8, bytes, 0);
-
-    var bytes2 = try allocator.alloc(u8, byte_count);
-    std.mem.set(u8, bytes2, 1);
-
-    expect(bytes[0] == 0);
-    expect(bytes[byte_count - 1] == 0);
-    expect(bytes2[0] == 1);
-    expect(bytes2[byte_count - 1] == 1);
-
-    cross(byte_count / 2, bytes, bytes2);
-
-    expect(bytes[0] == 1);
-    expect(bytes[byte_count - 1] == 0);
-    expect(bytes2[0] == 0);
-    expect(bytes2[byte_count - 1] == 1);
-}
-
 pub fn ones_evaluation(pop: *Pop, fitnesses: []f32) void {
     const ind_len = pop.inds[0].locs.len;
 
@@ -199,54 +152,10 @@ test "count ones" {
     expect(count_ones(([_]u8{})[0..]) == 0);
 }
 
-pub fn two_tournament_selection(src: *Pop, dest: *Pop, fitnesses: []f32, ps: f32, random: *std.rand.Random) void {
-    var ind_index: usize = 0;
-    while (ind_index < dest.inds.len) : (ind_index += 1) {
-        var first_index = random.intRangeAtMost(usize, 0, src.inds.len - 1);
-        var second_index = random.intRangeAtMost(usize, 0, src.inds.len - 1);
-
-        if (fitnesses[first_index] < fitnesses[second_index]) {
-            std.mem.swap(usize, &first_index, &second_index);
-        }
-
-        var selected: usize = hold_tournament(first_index, second_index, ps, random);
-        std.mem.copy(u8, dest.inds[ind_index].locs, src.inds[selected].locs);
-    }
-}
-
-/// Hold a two individual tournament. The first individual is assumed to have an equal or greater
-/// fitness compared to the second.
-pub fn hold_tournament(first_index: usize, second_index: usize, ps: f32, random: *std.rand.Random) usize {
-    var selected: usize = 0;
-    if (random.float(f32) < ps) {
-        selected = first_index;
-    } else {
-        selected = second_index;
-    }
-    return selected;
-}
-
-test "mem copy slice" {
-    const allocator = std.heap.page_allocator;
-
-    const byte_count = 10;
-    var bytes = try allocator.alloc(u8, byte_count);
-    std.mem.set(u8, bytes, 0);
-
-    var bytes2 = try allocator.alloc(u8, byte_count);
-    std.mem.set(u8, bytes2, 1);
-
-    expect(bytes[0] == 0);
-    expect(bytes2[0] == 1);
-    std.mem.copy(u8, bytes, bytes2);
-    expect(bytes[0] == 1);
-    expect(bytes2[0] == 1);
-}
-
 pub fn main() !void {
-    const POP_SIZE = 100;
-    const IND_SIZE = 128;
-    const GENS = 1000000;
+    const POP_SIZE = 50;
+    const IND_SIZE = 512;
+    const GENS = 100000;
 
     const PM: f32 = 0.005;
     const PC: f32 = 0.7;
@@ -295,18 +204,17 @@ pub fn main() !void {
             }
         }
 
-        two_tournament_selection(pop_src, pop_dest, fitnesses, PC, rand);
+        tourn.two_tournament_selection(pop_src, pop_dest, fitnesses, PC, rand);
 
         std.mem.swap(*Pop, &pop_src, &pop_dest);
 
         point_mutation(pop_src, rand, PM);
 
-        one_point_crossover(pop_src, rand, PT);
+        crossover.one_point_crossover(pop_src, rand, PC);
     }
 
     ones_evaluation(pop_src, fitnesses);
 
-    //try pop_src.print();
     var fit_index: usize = 0;
     while (fit_index < POP_SIZE) : (fit_index += 1) {
         try stdout.writer().print("{d} ", .{fitnesses[fit_index]});
